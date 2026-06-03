@@ -106,9 +106,9 @@ int Window::rebuild_approximation()
 
     step = perturbation_step();
 
-    error_code = build_method_11(n, a, b, func_id, perturbation, step,
-                                 function_value, function_first_derivative,
-                                 derivatives_11, temporary);
+    error_code =
+        build_method_11(n, a, b, func_id, perturbation, step, function_value,
+                        function_first_derivative, derivatives_11, temporary);
     if (error_code == APPROXIMATION_SUCCESS) {
         error_code = build_method_36(n, a, b, func_id, perturbation, step,
                                      function_value, function_second_derivative,
@@ -315,7 +315,9 @@ void Window::paintEvent(QPaintEvent * /* event */)
 
     if (approximation_error != APPROXIMATION_SUCCESS) {
         painter.setPen(Qt::red);
-        painter.drawText(10, 25, QString("approximation error: %1").arg(approximation_error));
+        painter.drawText(
+            10, 25,
+            QString("approximation error: %1").arg(approximation_error));
         return;
     }
 
@@ -353,7 +355,8 @@ void Window::paintEvent(QPaintEvent * /* event */)
             }
         }
 
-        if ((graph_mode == GRAPH_MODE_METHOD_11 || graph_mode == GRAPH_MODE_BOTH) &&
+        if ((graph_mode == GRAPH_MODE_METHOD_11 ||
+             graph_mode == GRAPH_MODE_BOTH) &&
             is_inside_interval(x, a, b)) {
             y_method_11 = method_11_value(x);
             if (y_method_11 < min_y) {
@@ -364,7 +367,8 @@ void Window::paintEvent(QPaintEvent * /* event */)
             }
         }
 
-        if ((graph_mode == GRAPH_MODE_METHOD_36 || graph_mode == GRAPH_MODE_BOTH) &&
+        if ((graph_mode == GRAPH_MODE_METHOD_36 ||
+             graph_mode == GRAPH_MODE_BOTH) &&
             is_inside_interval(x, a, b)) {
             y_method_36 = method_36_value(x);
             if (y_method_36 < min_y) {
@@ -429,7 +433,8 @@ void Window::paintEvent(QPaintEvent * /* event */)
     max_y += y;
 
     std::printf("mode=%s k=%d n=%d scale=%d perturbation=%d max_abs=%.16e\n",
-                graph_mode_name(), func_id, n, scale_power, perturbation, max_abs);
+                graph_mode_name(), func_id, n, scale_power, perturbation,
+                max_abs);
 
     painter.save();
     painter.translate(0.5 * width(), 0.5 * height());
@@ -466,7 +471,8 @@ void Window::paintEvent(QPaintEvent * /* event */)
             x = left + (right - left) * (double)i / (double)samples;
             if (is_inside_interval(x, a, b)) {
                 if (graph_mode == GRAPH_MODE_ERRORS) {
-                    y_current = display_error_value(method_11_value(x) - exact_value(x));
+                    y_current = display_error_value(method_11_value(x) -
+                                                    exact_value(x));
                 } else {
                     y_current = method_11_value(x);
                 }
@@ -493,7 +499,8 @@ void Window::paintEvent(QPaintEvent * /* event */)
             x = left + (right - left) * (double)i / (double)samples;
             if (is_inside_interval(x, a, b)) {
                 if (graph_mode == GRAPH_MODE_ERRORS) {
-                    y_current = display_error_value(method_36_value(x) - exact_value(x));
+                    y_current = display_error_value(method_36_value(x) -
+                                                    exact_value(x));
                 } else {
                     y_current = method_36_value(x);
                 }

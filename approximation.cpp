@@ -74,7 +74,6 @@ static double evaluate_cubic(double point, double x0, double x1, double f0,
     return ((c3 * dx + c2) * dx + c1) * dx + c0;
 }
 
-
 int build_method_11(int n, double left, double right, int func_id,
                     int perturbation, double perturbation_step,
                     FunctionPointer function_value,
@@ -277,8 +276,8 @@ double evaluate_method_11(double point, double left, double right, int n,
     x0 = node_coordinate(left, h, index);
     x1 = x0 + h;
 
-    f0 = node_value(index, left, h, n, func_id, perturbation,
-                    perturbation_step, function_value);
+    f0 = node_value(index, left, h, n, func_id, perturbation, perturbation_step,
+                    function_value);
     f1 = node_value(index + 1, left, h, n, func_id, perturbation,
                     perturbation_step, function_value);
     d0 = derivatives[index];
@@ -311,8 +310,8 @@ double evaluate_method_36(double point, double left, double right, int n,
     x0 = node_coordinate(left, h, index);
     x1 = x0 + h;
 
-    f0 = node_value(index, left, h, n, func_id, perturbation,
-                    perturbation_step, function_value);
+    f0 = node_value(index, left, h, n, func_id, perturbation, perturbation_step,
+                    function_value);
     f1 = node_value(index + 1, left, h, n, func_id, perturbation,
                     perturbation_step, function_value);
     d0 = derivatives[index];

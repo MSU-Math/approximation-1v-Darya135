@@ -29,7 +29,8 @@ int main(int argc, char *argv[])
     action = tool_bar->addAction("&Function", graph_area, SLOT(change_func()));
     action->setShortcut(QString("0"));
 
-    action = tool_bar->addAction("&Mode", graph_area, SLOT(change_graph_mode()));
+    action =
+        tool_bar->addAction("&Mode", graph_area, SLOT(change_graph_mode()));
     action->setShortcut(QString("1"));
 
     action = tool_bar->addAction("Zoom &in", graph_area, SLOT(zoom_in()));
@@ -44,10 +45,12 @@ int main(int argc, char *argv[])
     action = tool_bar->addAction("Decrease n", graph_area, SLOT(decrease_n()));
     action->setShortcut(QString("5"));
 
-    action = tool_bar->addAction("Increase perturbation", graph_area, SLOT(increase_perturbation()));
+    action = tool_bar->addAction("Increase perturbation", graph_area,
+                                 SLOT(increase_perturbation()));
     action->setShortcut(QString("6"));
 
-    action = tool_bar->addAction("Decrease perturbation", graph_area, SLOT(decrease_perturbation()));
+    action = tool_bar->addAction("Decrease perturbation", graph_area,
+                                 SLOT(decrease_perturbation()));
     action->setShortcut(QString("7"));
 
     action = tool_bar->addAction("E&xit", window, SLOT(close()));
