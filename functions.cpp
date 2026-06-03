@@ -108,7 +108,7 @@ double function_max_abs(int k, double a, double b)
 
     return max_double(v1, v2);
 }
-/*
+
 const char *function_name(int k)
 {
     switch (k) {
@@ -130,4 +130,3 @@ const char *function_name(int k)
         return "unknown";
     }
 }
-*/
