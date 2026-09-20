@@ -136,13 +136,6 @@ int BuildingMethod36(int n, const double *x, const double *f, double *a,
     return 0;
 }
 
-static double EvaluateSegment(double x, const double *A, int i)
-{
-	double dx = x - A[0];
-    (void)dx;
-    return 0.0;
-}
-
 static double EvalCubic(int i, double x, const double *X, const double *A)
 {
     double dx = x - X[i];
