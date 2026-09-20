@@ -13,9 +13,6 @@
 #define EPS 1e-16
 #define MAXIMAL_N 10000000
 
-/* ------------------------------------------------------------------ */
-/*  семь функций и их производные                                     */
-/* ------------------------------------------------------------------ */
 
 static double f_0(double x)  { (void)x; return 1.0; }
 static double df_0(double x) { (void)x; return 0.0; }
@@ -74,9 +71,6 @@ static double d2f_6(double x)
     return (3750.0 * x * x - 50.0) / (d * d * d);
 }
 
-/* ------------------------------------------------------------------ */
-/*  вспомогательные минимум/максимум                                  */
-/* ------------------------------------------------------------------ */
 
 static double GetMin(double y1, double y2, bool fp, int nes)
 {
@@ -94,9 +88,6 @@ static double GetMax(double y1, double y2, bool fp, int nes)
     return (y1 > y2) ? y1 : y2;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Window                                                            */
-/* ------------------------------------------------------------------ */
 
 Window::Window(QWidget *parent) : QWidget(parent)
 {
@@ -183,9 +174,6 @@ void Window::change_func()
     update();
 }
 
-/* ------------------------------------------------------------------ */
-/*  отрисовка                                                         */
-/* ------------------------------------------------------------------ */
 
 void Window::paintEvent(QPaintEvent * /* event */)
 {
@@ -246,7 +234,6 @@ void Window::paintEvent(QPaintEvent * /* event */)
         }
     }
 
-    /* ---- проход 1: определяем min_y/max_y ---------------------------- */
     for (double x = a_scaled; x <= b_scaled; x += delta_x) {
         switch (display) {
         case 0:
@@ -307,7 +294,6 @@ void Window::paintEvent(QPaintEvent * /* event */)
         first_p = false;
     }
 
-    /* ---- граничные точки --------------------------------------------- */
     for (int kk = 0; kk < 2; ++kk) {
         double x = (kk == 0) ? a_scaled : b_scaled;
 
@@ -351,7 +337,6 @@ void Window::paintEvent(QPaintEvent * /* event */)
     min_y -= delta_y;
     max_y += delta_y;
 
-    /* ---- собственно рисование --------------------------------------- */
     painter.save();
     painter.translate(0, height());
     painter.scale(width() / (b_scaled - a_scaled), -height() / (max_y - min_y));
@@ -399,7 +384,6 @@ void Window::paintEvent(QPaintEvent * /* event */)
     painter.drawLine(0, min_y, 0, max_y);
     painter.restore();
 
-    /* ---- надписи ----------------------------------------------------- */
     painter.setPen("black");
     painter.drawText(10, 20, QString("k=%1, %2").arg(k).arg(f_name));
     painter.drawText(10, 40, QString("max|f| = %1").arg(max_abs));
@@ -448,7 +432,6 @@ void Window::paintEvent(QPaintEvent * /* event */)
         }
     }
 
-    /* ---- освобождение памяти ---------------------------------------- */
     delete[] X;
     delete[] F;
     delete[] A1;
@@ -457,9 +440,6 @@ void Window::paintEvent(QPaintEvent * /* event */)
     delete[] extra2;
 }
 
-/* ------------------------------------------------------------------ */
-/*  отрисовка составных частей                                        */
-/* ------------------------------------------------------------------ */
 
 void Window::DrawingFunction(QPainter &painter, double a, double b, double dx)
 {
@@ -532,9 +512,6 @@ void Window::DrawingError(QPainter &painter, double a, double b, double dx,
     }
 }
 
-/* ------------------------------------------------------------------ */
-/*  клавиши                                                           */
-/* ------------------------------------------------------------------ */
 
 void Window::keyPressEvent(QKeyEvent *event)
 {
