@@ -1,9 +1,9 @@
-QMAKE_CXXFLAGS += -Werror -Wall -Wextra
-HEADERS = window.h \
-          functions.h \
-          approximation.h
-SOURCES = main.cpp \
-          window.cpp \
-          functions.cpp \
-          approximation.cpp
+QMAKE_CXXFLAGS += -Werror
+HEADERS    = window.h \
+    inter_app.h
+
+SOURCES    = main.cpp \
+    window.cpp \
+    inter_app.cpp
+
 QT += widgets
