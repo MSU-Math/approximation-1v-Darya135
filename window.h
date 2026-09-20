@@ -3,8 +3,7 @@
 
 #include <QWidget>
 
-class Window : public QWidget
-{
+class Window : public QWidget {
     Q_OBJECT
 
   private:
@@ -44,9 +43,8 @@ class Window : public QWidget
     void DrawingApproximation(QPainter &painter, double a, double b, double dx,
                               int n, const double *X, const double *F,
                               const double *A, int m);
-    void DrawingError(QPainter &painter, double a, double b, double dx,
-                      int n, const double *X, const double *F,
-                      const double *A, int m);
+    void DrawingError(QPainter &painter, double a, double b, double dx, int n,
+                      const double *X, const double *F, const double *A, int m);
 
   public:
     Window(QWidget *parent);
