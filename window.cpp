@@ -3,7 +3,8 @@
 #include <QKeyEvent>
 #include <QPainter>
 #include <cmath>
-#include <stdio.h>
+#include <cstdio>
+#include <ctime>
 
 #define DEFAULT_A -10
 #define DEFAULT_B 10
@@ -92,7 +93,8 @@ Window::Window(QWidget *parent) : QWidget(parent)
     cache_a = cache_b = 0.0;
     cache_n = cache_k = cache_perturbation = cache_scale = 0;
     cache_11 = cache_36 = false;
-    cache_X = cache_F = cache_A1 = cache_A2 = 0;
+    cache_alloc_n = 0;
+    cache_X = cache_F = cache_A1 = cache_A2 = cache_extra = 0;
 
     setFocusPolicy(Qt::StrongFocus);
 }
@@ -104,20 +106,30 @@ Window::~Window()
 
 void Window::free_cache()
 {
-    delete[] cache_X;
-    delete[] cache_F;
-    delete[] cache_A1;
-    delete[] cache_A2;
-    cache_X = cache_F = cache_A1 = cache_A2 = 0;
+    delete[] cache_X;     cache_X = 0;
+    delete[] cache_F;     cache_F = 0;
+    delete[] cache_A1;    cache_A1 = 0;
+    delete[] cache_A2;    cache_A2 = 0;
+    delete[] cache_extra; cache_extra = 0;
+    cache_alloc_n = 0;
     cache_valid = false;
 }
 
-void Window::build_cache(double a_scaled, double b_scaled, double *extra)
+void Window::build_cache(double a_scaled, double b_scaled)
 {
-    free_cache();
+    clock_t t_start = clock();
 
-    cache_X = new double[n];
-    cache_F = new double[n];
+    /* Переиспользуем память, если n не изменилось.
+     * Ключевое: не даём ядру заново размечать ~240 МБ
+     * на каждом rebuild. */
+    if (cache_alloc_n != n) {
+        delete[] cache_X;     cache_X = new double[n];
+        delete[] cache_F;     cache_F = new double[n];
+        delete[] cache_A1;    cache_A1 = new double[n];
+        delete[] cache_A2;    cache_A2 = new double[n];
+        delete[] cache_extra; cache_extra = new double[n];
+        cache_alloc_n = n;
+    }
 
     double step = (b_scaled - a_scaled) / (n - 1);
     for (int i = 0; i < n; i++) {
@@ -133,15 +145,13 @@ void Window::build_cache(double a_scaled, double b_scaled, double *extra)
 
     cache_11 = cache_36 = false;
     if (need_11 && n >= 2) {
-        cache_A1 = new double[n];
-        if (BuildingMethod11(n, cache_X, cache_F, cache_A1, extra,
+        if (BuildingMethod11(n, cache_X, cache_F, cache_A1, cache_extra,
                              df(cache_X[0]), df(cache_X[n - 1])) == 0) {
             cache_11 = true;
         }
     }
     if (need_36 && n >= 2) {
-        cache_A2 = new double[n];
-        if (BuildingMethod36(n, cache_X, cache_F, cache_A2, extra,
+        if (BuildingMethod36(n, cache_X, cache_F, cache_A2, cache_extra,
                              d2f(cache_X[0]), d2f(cache_X[n - 1])) == 0) {
             cache_36 = true;
         }
@@ -154,6 +164,9 @@ void Window::build_cache(double a_scaled, double b_scaled, double *extra)
     cache_perturbation = perturbation;
     cache_scale = scale;
     cache_valid = true;
+
+    printf("build n=%d : %.3f s (CPU)\n", n,
+           (double)(clock() - t_start) / CLOCKS_PER_SEC);
 }
 
 QSize Window::minimumSizeHint() const { return QSize(100, 100); }
@@ -224,7 +237,7 @@ void Window::paintEvent(QPaintEvent * /* event */)
     }
     delta_x = (b_scaled - a_scaled) / draw_points;
 
-    /* --- max|f| на видимом интервале --- */
+    /* max|f| на видимом интервале */
     double max_f_global = 0.0;
     for (double xx = a_scaled; xx <= b_scaled; xx += delta_x) {
         double vv = fabs(f(xx));
@@ -235,16 +248,14 @@ void Window::paintEvent(QPaintEvent * /* event */)
     max_f = max_f_global;
     printf("max|f| = %.16e\n", max_f);
 
-    /* --- перестроить кэш только если параметры изменились --- */
+    /* перестроить кэш только если параметры изменились */
     bool params_changed =
         !cache_valid || cache_a != a || cache_b != b || cache_n != n ||
         cache_k != func_id || cache_perturbation != perturbation ||
         cache_scale != scale;
 
     if (params_changed) {
-        double *extra = new double[n];
-        build_cache(a_scaled, b_scaled, extra);
-        delete[] extra;
+        build_cache(a_scaled, b_scaled);
     }
 
     double *X = cache_X;
