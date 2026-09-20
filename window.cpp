@@ -119,9 +119,6 @@ void Window::build_cache(double a_scaled, double b_scaled)
 {
     clock_t t_start = clock();
 
-    /* Переиспользуем память, если n не изменилось.
-     * Ключевое: не даём ядру заново размечать ~240 МБ
-     * на каждом rebuild. */
     if (cache_alloc_n != n) {
         delete[] cache_X;     cache_X = new double[n];
         delete[] cache_F;     cache_F = new double[n];
@@ -191,14 +188,16 @@ int Window::parse_command_line(int argc, char *argv[])
         qWarning("Wrong argument k");
         return -2;
     }
-    func_id = k;
-    change_func();
+    set_function(k);
     return 0;
 }
 
-void Window::change_func()
+/* Устанавливает конкретную функцию по индексу 0..6.
+ * Используется при старте и из change_func(). */
+void Window::set_function(int id)
 {
-    func_id = func_id % 7;
+    func_id = id % 7;
+    k = func_id;
 
     switch (func_id) {
     case 0:
@@ -220,6 +219,13 @@ void Window::change_func()
     update();
 }
 
+/* Слот: циклически переключает функцию.
+ * Вызывается и из меню, и из клавиши 0. */
+void Window::change_func()
+{
+    set_function((func_id + 1) % 7);
+}
+
 void Window::paintEvent(QPaintEvent * /* event */)
 {
     QPainter painter(this);
@@ -237,7 +243,6 @@ void Window::paintEvent(QPaintEvent * /* event */)
     }
     delta_x = (b_scaled - a_scaled) / draw_points;
 
-    /* max|f| на видимом интервале */
     double max_f_global = 0.0;
     for (double xx = a_scaled; xx <= b_scaled; xx += delta_x) {
         double vv = fabs(f(xx));
@@ -248,7 +253,6 @@ void Window::paintEvent(QPaintEvent * /* event */)
     max_f = max_f_global;
     printf("max|f| = %.16e\n", max_f);
 
-    /* перестроить кэш только если параметры изменились */
     bool params_changed =
         !cache_valid || cache_a != a || cache_b != b || cache_n != n ||
         cache_k != func_id || cache_perturbation != perturbation ||
@@ -547,8 +551,6 @@ void Window::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
     case Qt::Key_0:
-        k = (k + 1) % 7;
-        func_id = k;
         change_func();
         break;
     case Qt::Key_1:

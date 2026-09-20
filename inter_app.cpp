@@ -5,8 +5,7 @@
 #define EPS_PIVOT 1.0e-300
 
 int BuildingMethod11(int n, const double *x, const double *f, double *a,
-                     double *extra, double df_left, double df_right)
-{
+                     double *extra, double df_left, double df_right) {
     if (n < 2 || !x || !f || !a || !extra) {
         return -1;
     }
@@ -59,8 +58,7 @@ int BuildingMethod11(int n, const double *x, const double *f, double *a,
 }
 
 int BuildingMethod36(int n, const double *x, const double *f, double *a,
-                     double *extra, double d2f_left, double d2f_right)
-{
+                     double *extra, double d2f_left, double d2f_right) {
     if (n < 2 || !x || !f || !a || !extra) {
         return -1;
     }
@@ -101,8 +99,7 @@ int BuildingMethod36(int n, const double *x, const double *f, double *a,
     return 0;
 }
 
-static int FindSegment(double x, int n, const double *X)
-{
+static int FindSegment(double x, int n, const double *X) {
     if (x <= X[0]) {
         return 0;
     }
@@ -123,8 +120,7 @@ static int FindSegment(double x, int n, const double *X)
 }
 
 static double EvalCubic(int i, double x, const double *X, const double *F,
-                        const double *d)
-{
+                        const double *d) {
     double h = X[i + 1] - X[i];
     double dx = x - X[i];
     double delta = (F[i + 1] - F[i]) / h;
@@ -137,9 +133,8 @@ static double EvalCubic(int i, double x, const double *X, const double *F,
     return a0 + a1 * dx + a2 * dx * dx + a3 * dx * dx * dx;
 }
 
-double EvaluationMethod11(double x, double a, double b, int n,
-                          const double *X, const double *F, const double *A)
-{
+double EvaluationMethod11(double x, double a, double b, int n, const double *X,
+                          const double *F, const double *A) {
     (void)a;
     (void)b;
     if (n < 2 || !X || !F || !A) {
@@ -149,9 +144,8 @@ double EvaluationMethod11(double x, double a, double b, int n,
     return EvalCubic(i, x, X, F, A);
 }
 
-double EvaluationMethod36(double x, double a, double b, int n,
-                          const double *X, const double *F, const double *A)
-{
+double EvaluationMethod36(double x, double a, double b, int n, const double *X,
+                          const double *F, const double *A) {
     (void)a;
     (void)b;
     if (n < 2 || !X || !F || !A) {

@@ -38,6 +38,7 @@ class Window : public QWidget
 
     void free_cache();
     void build_cache(double a_scaled, double b_scaled);
+    void set_function(int id);
 
     void DrawingFunction(QPainter &painter, double a, double b, double dx);
     void DrawingApproximation(QPainter &painter, double a, double b, double dx,
