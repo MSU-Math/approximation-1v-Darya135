@@ -29,13 +29,15 @@ class Window : public QWidget
     double cache_a, cache_b;
     int cache_n, cache_k, cache_perturbation, cache_scale;
     bool cache_11, cache_36;
+    int cache_alloc_n;
     double *cache_X;
     double *cache_F;
     double *cache_A1;
     double *cache_A2;
+    double *cache_extra;
 
     void free_cache();
-    void build_cache(double a_scaled, double b_scaled, double *extra);
+    void build_cache(double a_scaled, double b_scaled);
 
     void DrawingFunction(QPainter &painter, double a, double b, double dx);
     void DrawingApproximation(QPainter &painter, double a, double b, double dx,
