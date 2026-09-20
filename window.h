@@ -15,23 +15,39 @@ class Window : public QWidget
     int n;
     int k;
 
-    double (*f)(double); /* сама функция */
-    double (*df)(double); /* первая производная  — для метода 11 */
-    double (*d2f)(double); /* вторая производная  — для метода 36 */
+    double (*f)(double);
+    double (*df)(double);
+    double (*d2f)(double);
 
-    int display; /* 0..3 — что показывать */
-    int scale; /* масштаб по X */
-    int perturbation; /* p — возмущение f(x_{n/2}) */
-    double max_f; /* max|f| на [a, b] — для возмущения */
+    int display;
+    int scale;
+    int perturbation;
+    double max_f;
+
+    /* кэш построенных приближений */
+    bool cache_valid;
+    double cache_a, cache_b;
+    int cache_n, cache_k, cache_perturbation, cache_scale;
+    bool cache_11, cache_36;
+    double *cache_X;
+    double *cache_F;
+    double *cache_A1;
+    double *cache_A2;
+
+    void free_cache();
+    void build_cache(double a_scaled, double b_scaled, double *extra);
 
     void DrawingFunction(QPainter &painter, double a, double b, double dx);
     void DrawingApproximation(QPainter &painter, double a, double b, double dx,
-                              int n, const double *X, const double *A, int m);
-    void DrawingError(QPainter &painter, double a, double b, double dx, int n,
-                      const double *X, const double *A, int m);
+                              int n, const double *X, const double *F,
+                              const double *A, int m);
+    void DrawingError(QPainter &painter, double a, double b, double dx,
+                      int n, const double *X, const double *F,
+                      const double *A, int m);
 
   public:
-    explicit Window(QWidget *parent);
+    Window(QWidget *parent);
+    ~Window();
 
     QSize minimumSizeHint() const;
     QSize sizeHint() const;
