@@ -165,8 +165,8 @@ static int FindSegment(double x, int n, const double *X)
     return left;
 }
 
-double EvaluationMethod11(double x, double a, double b, int n,
-                          const double *X, const double *A)
+double EvaluationMethod11(double x, double a, double b, int n, const double *X,
+                          const double *A)
 {
     (void)a;
     (void)b;
@@ -177,8 +177,8 @@ double EvaluationMethod11(double x, double a, double b, int n,
     return EvalCubic(i, x, X, A);
 }
 
-double EvaluationMethod36(double x, double a, double b, int n,
-                          const double *X, const double *A)
+double EvaluationMethod36(double x, double a, double b, int n, const double *X,
+                          const double *A)
 {
     (void)a;
     (void)b;
