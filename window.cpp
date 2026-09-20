@@ -1,408 +1,326 @@
 #include "window.h"
-
-#include "approximation.h"
-#include "functions.h"
+#include "inter_app.h"
 
 #include <QKeyEvent>
 #include <QPainter>
-#include <QPolygonF>
 #include <cmath>
 #include <cstdio>
-#include <cstdlib>
-#include <new>
 
-#define MINIMAL_N 2
-#define FUNCTION_COUNT 7
-#define SAMPLE_COUNT_MIN 100
-#define SAMPLE_COUNT_MAX 1200
-#define SCALE_POWER_MIN -8
-#define SCALE_POWER_MAX 8
-#define ERROR_DISPLAY_EPS 1.0e-12
+#define DEFAULT_A -10
+#define DEFAULT_B 10
+#define DEFAULT_N 10
+#define DEFAULT_K 0
+#define EPS 1e-16
 #define MAXIMAL_N 10000000
+
+
+static double f_0(double x)  { (void)x; return 1.0; }
+static double df_0(double x) { (void)x; return 0.0; }
+static double d2f_0(double x){ (void)x; return 0.0; }
+
+static double f_1(double x)  { return x; }
+static double df_1(double x) { (void)x; return 1.0; }
+static double d2f_1(double x){ (void)x; return 0.0; }
+
+static double f_2(double x)  { return x * x; }
+static double df_2(double x) { return 2.0 * x; }
+static double d2f_2(double x){ (void)x; return 2.0; }
+
+static double f_3(double x)  { return x * x * x; }
+static double df_3(double x) { return 3.0 * x * x; }
+static double d2f_3(double x){ return 6.0 * x; }
+
+static double f_4(double x)  { return x * x * x * x; }
+static double df_4(double x) { return 4.0 * x * x * x; }
+static double d2f_4(double x){ return 12.0 * x * x; }
+
+static double f_5(double x)
+{
+    if (std::fabs(x) > 512.0) {
+        return 0.0;
+    }
+    return std::exp(x);
+}
+static double df_5(double x)
+{
+    if (std::fabs(x) > 512.0) {
+        return 0.0;
+    }
+    return std::exp(x);
+}
+static double d2f_5(double x)
+{
+    if (std::fabs(x) > 512.0) {
+        return 0.0;
+    }
+    return std::exp(x);
+}
+
+static double f_6(double x)
+{
+    return 1.0 / (25.0 * x * x + 1.0);
+}
+static double df_6(double x)
+{
+    double d = 25.0 * x * x + 1.0;
+    return -50.0 * x / (d * d);
+}
+static double d2f_6(double x)
+{
+    double d = 25.0 * x * x + 1.0;
+    return (3750.0 * x * x - 50.0) / (d * d * d);
+}
+
+
+static double GetMin(double y1, double y2, bool fp, int nes)
+{
+    if (nes == 1 && fp) {
+        return y2;
+    }
+    return (y1 < y2) ? y1 : y2;
+}
+
+static double GetMax(double y1, double y2, bool fp, int nes)
+{
+    if (nes == 1 && fp) {
+        return y2;
+    }
+    return (y1 > y2) ? y1 : y2;
+}
+
 
 Window::Window(QWidget *parent) : QWidget(parent)
 {
-    a = 0.0;
-    b = 0.0;
-    n = 0;
-    func_id = 0;
-    graph_mode = GRAPH_MODE_BOTH;
-    scale_power = 0;
-    perturbation = 0;
-    approximation_error = APPROXIMATION_ERROR_INVALID_ARGUMENTS;
+    a = DEFAULT_A;
+    b = DEFAULT_B;
+    n = DEFAULT_N;
+    k = DEFAULT_K;
+    func_id = k;
 
-    derivatives_11 = 0;
-    derivatives_36 = 0;
+    f = f_0;
+    df = df_0;
+    d2f = d2f_0;
+
+    display = 0;
+    scale = 0;
+    perturbation = 0;
+    max_f = 0.0;
 
     setFocusPolicy(Qt::StrongFocus);
+    change_func();
 }
 
-Window::~Window()
-{
-    free_memory();
-}
-
-QSize Window::minimumSizeHint() const
-{
-    return QSize(100, 100);
-}
-
-QSize Window::sizeHint() const
-{
-    return QSize(1000, 800);
-}
-
-void Window::free_memory()
-{
-    delete[] derivatives_11;
-    delete[] derivatives_36;
-    derivatives_11 = 0;
-    derivatives_36 = 0;
-}
-
-int Window::allocate_memory()
-{
-    free_memory();
-
-    if (n < MINIMAL_N) {
-        return APPROXIMATION_ERROR_INVALID_ARGUMENTS;
-    }
-
-    derivatives_11 = new (std::nothrow) double[n];
-    derivatives_36 = new (std::nothrow) double[n];
-    if (derivatives_11 == 0 || derivatives_36 == 0) {
-        free_memory();
-        return APPROXIMATION_ERROR_INVALID_ARGUMENTS;
-    }
-
-    return APPROXIMATION_SUCCESS;
-}
-
-double Window::perturbation_step() const
-{
-    return 0.1 * function_max_abs(func_id, a, b);
-}
-
-int Window::rebuild_approximation()
-{
-    int error_code;
-    double *temporary;
-    double step;
-
-    error_code = allocate_memory();
-    if (error_code != APPROXIMATION_SUCCESS) {
-        approximation_error = error_code;
-        update();
-        return error_code;
-    }
-
-    temporary = new (std::nothrow) double[n];
-    if (temporary == 0) {
-        free_memory();
-        approximation_error = APPROXIMATION_ERROR_INVALID_ARGUMENTS;
-        update();
-        return approximation_error;
-    }
-
-    step = perturbation_step();
-
-    error_code =
-        build_method_11(n, a, b, func_id, perturbation, step, function_value,
-                        function_first_derivative, derivatives_11, temporary);
-    if (error_code == APPROXIMATION_SUCCESS) {
-        error_code = build_method_36(n, a, b, func_id, perturbation, step,
-                                     function_value, function_second_derivative,
-                                     derivatives_36, temporary);
-    }
-
-    delete[] temporary;
-
-    if (error_code != APPROXIMATION_SUCCESS) {
-        approximation_error = error_code;
-        update();
-        return error_code;
-    }
-
-    approximation_error = APPROXIMATION_SUCCESS;
-    update();
-    return APPROXIMATION_SUCCESS;
-}
+QSize Window::minimumSizeHint() const { return QSize(100, 100); }
+QSize Window::sizeHint() const { return QSize(1000, 1000); }
 
 int Window::parse_command_line(int argc, char *argv[])
 {
-    int parsed;
-
     if (argc != 5) {
+        qWarning("Wrong amount of arguments\n");
         return -1;
     }
-
-    parsed = sscanf(argv[1], "%lf", &a);
-    if (parsed != 1) {
-        return -1;
+    if (sscanf(argv[1], "%lf", &a) != 1 || sscanf(argv[2], "%lf", &b) != 1 ||
+        b - a < 1.e-6) {
+        qWarning("Wrong arguments a or b");
+        return -2;
     }
-
-    parsed = sscanf(argv[2], "%lf", &b);
-    if (parsed != 1) {
-        return -1;
+    if (sscanf(argv[3], "%d", &n) != 1 || n < 2 || n > MAXIMAL_N) {
+        qWarning("Wrong argument n");
+        return -2;
     }
-
-    parsed = sscanf(argv[3], "%d", &n);
-    if (parsed != 1) {
-        return -1;
+    if (sscanf(argv[4], "%d", &k) != 1 || k < 0 || k > 6) {
+        qWarning("Wrong argument k");
+        return -2;
     }
-
-    parsed = sscanf(argv[4], "%d", &func_id);
-    if (parsed != 1) {
-        return -1;
-    }
-
-    if (!(b > a) || n < MINIMAL_N || n > MAXIMAL_N || func_id < 0 ||
-        func_id >= FUNCTION_COUNT) {
-        return -1;
-    }
-
-    return rebuild_approximation();
+    func_id = k;
+    change_func();
+    return 0;
 }
 
 void Window::change_func()
 {
-    func_id = (func_id + 1) % FUNCTION_COUNT;
-    perturbation = 0;
-    scale_power = 0;
-    rebuild_approximation();
-}
+    func_id = func_id % 7;
 
-void Window::change_graph_mode()
-{
-    graph_mode = (graph_mode + 1) % 4;
+    switch (func_id) {
+    case 0:
+        f_name = "f (x) = 1";
+        f = f_0; df = df_0; d2f = d2f_0;
+        break;
+    case 1:
+        f_name = "f (x) = x";
+        f = f_1; df = df_1; d2f = d2f_1;
+        break;
+    case 2:
+        f_name = "f (x) = x^2";
+        f = f_2; df = df_2; d2f = d2f_2;
+        break;
+    case 3:
+        f_name = "f (x) = x^3";
+        f = f_3; df = df_3; d2f = d2f_3;
+        break;
+    case 4:
+        f_name = "f (x) = x^4";
+        f = f_4; df = df_4; d2f = d2f_4;
+        break;
+    case 5:
+        f_name = "f (x) = e^x";
+        f = f_5; df = df_5; d2f = d2f_5;
+        break;
+    case 6:
+        f_name = "f (x) = 1/(25*x^2 + 1)";
+        f = f_6; df = df_6; d2f = d2f_6;
+        break;
+    }
     update();
 }
 
-void Window::zoom_in()
-{
-    if (scale_power < SCALE_POWER_MAX) {
-        ++scale_power;
-        update();
-    }
-}
-
-void Window::zoom_out()
-{
-    if (scale_power > SCALE_POWER_MIN) {
-        --scale_power;
-        update();
-    }
-}
-
-void Window::increase_n()
-{
-    if (n <= MAXIMAL_N / 2) {
-        n *= 2;
-    } else {
-        n = MAXIMAL_N;
-    }
-    rebuild_approximation();
-}
-
-void Window::decrease_n()
-{
-    if (n > MINIMAL_N) {
-        n = (n + 1) / 2;
-        if (n < MINIMAL_N) {
-            n = MINIMAL_N;
-        }
-        rebuild_approximation();
-    }
-}
-
-void Window::increase_perturbation()
-{
-    ++perturbation;
-    rebuild_approximation();
-}
-
-void Window::decrease_perturbation()
-{
-    --perturbation;
-    rebuild_approximation();
-}
-
-void Window::get_visible_interval(double *left, double *right) const
-{
-    double multiplier;
-    double center;
-    double half_length;
-
-    multiplier = std::pow(2.0, (double)scale_power);
-    center = 0.5 * (a + b);
-    half_length = 0.5 * (b - a) / multiplier;
-
-    *left = center - half_length;
-    *right = center + half_length;
-}
-
-double Window::exact_value(double x) const
-{
-    return function_value(func_id, x);
-}
-
-double Window::method_11_value(double x) const
-{
-    return evaluate_method_11(x, a, b, n, func_id, perturbation,
-                              perturbation_step(), function_value,
-                              derivatives_11);
-}
-
-double Window::method_36_value(double x) const
-{
-    return evaluate_method_36(x, a, b, n, func_id, perturbation,
-                              perturbation_step(), function_value,
-                              derivatives_36);
-}
-
-const char *Window::graph_mode_name() const
-{
-    switch (graph_mode) {
-    case GRAPH_MODE_METHOD_11:
-        return "f and method 11";
-    case GRAPH_MODE_METHOD_36:
-        return "f and method 36";
-    case GRAPH_MODE_BOTH:
-        return "f and methods 11, 36";
-    case GRAPH_MODE_ERRORS:
-        return "errors of methods 11, 36";
-    default:
-        return "unknown";
-    }
-}
-
-static double display_error_value(double value)
-{
-    if (std::fabs(value) < ERROR_DISPLAY_EPS) {
-        return 0.0;
-    }
-    return value;
-}
-
-static bool is_inside_interval(double x, double left, double right)
-{
-    return x >= left && x <= right;
-}
 
 void Window::paintEvent(QPaintEvent * /* event */)
 {
     QPainter painter(this);
-    QPen pen;
-    QString info;
-    int samples;
-    int i;
-    int text_y;
-    double left;
-    double right;
-    double x;
-    double y;
-    double y_function;
-    double y_method_11;
-    double y_method_36;
-    double min_y;
-    double max_y;
-    double max_abs;
-    double y_current;
-    bool initialized;
-    QPolygonF points;
 
-    painter.fillRect(rect(), Qt::white);
+    double s = std::pow(2.0, scale);
+    double a_scaled = a / s;
+    double b_scaled = b / s;
 
-    if (approximation_error != APPROXIMATION_SUCCESS) {
-        painter.setPen(Qt::red);
-        painter.drawText(
-            10, 25,
-            QString("approximation error: %1").arg(approximation_error));
-        return;
+    double delta_x = (b_scaled - a_scaled) / n;
+    double min_y = 0.0;
+    double max_y = 0.0;
+    double value = 0.0;
+    double error1 = 0.0;
+    double error2 = 0.0;
+    double error = 0.0;
+    double temp = 0.0;
+    double max_abs = 0.0;
+    int pos = 160;
+
+    double *X = new double[n];
+    double *F = new double[n];
+    double *A1 = nullptr;
+    double *A2 = nullptr;
+    double *extra1 = nullptr;
+    double *extra2 = nullptr;
+
+    double step = (b_scaled - a_scaled) / (n - 1);
+    bool is_first_method = false;
+    bool is_second_method = false;
+    bool first_p = true;
+
+    int draw_points = (n <= 50) ? (n * 10) : 1000;
+    if (draw_points < 100) {
+        draw_points = 100;
+    }
+    delta_x = (b_scaled - a_scaled) / draw_points;
+
+    for (int i = 0; i < n; ++i) {
+        X[i] = a_scaled + i * step;
+        F[i] = f(X[i]);
+        if (i == n / 2 && max_f > EPS) {
+            F[i] += perturbation * 0.1 * max_f;
+        }
     }
 
-    get_visible_interval(&left, &right);
-    samples = width();
-    if (samples < SAMPLE_COUNT_MIN) {
-        samples = SAMPLE_COUNT_MIN;
+    if (n >= 2) {
+        A1 = new double[4 * (n - 1)];
+        extra1 = new double[2 * n];
+        if (BuildingMethod11(n, X, F, A1, extra1, df(X[0]), df(X[n - 1])) == 0) {
+            is_first_method = true;
+        }
+
+        A2 = new double[4 * (n - 1)];
+        extra2 = new double[2 * n];
+        if (BuildingMethod36(n, X, F, A2, extra2, d2f(X[0]), d2f(X[n - 1])) == 0) {
+            is_second_method = true;
+        }
     }
-    if (samples > SAMPLE_COUNT_MAX) {
-        samples = SAMPLE_COUNT_MAX;
+
+    for (double x = a_scaled; x <= b_scaled; x += delta_x) {
+        switch (display) {
+        case 0:
+            value = f(x);
+            min_y = GetMin(min_y, value, first_p, 1);
+            max_y = GetMax(max_y, value, first_p, 1);
+            if (is_first_method) {
+                value = EvaluationMethod11(x, a_scaled, b_scaled, n, X, A1);
+                min_y = GetMin(min_y, value, first_p, 0);
+                max_y = GetMax(max_y, value, first_p, 0);
+            }
+            break;
+
+        case 1:
+            value = f(x);
+            min_y = GetMin(min_y, value, first_p, 1);
+            max_y = GetMax(max_y, value, first_p, 1);
+            if (is_second_method) {
+                value = EvaluationMethod36(x, a_scaled, b_scaled, n, X, A2);
+                min_y = GetMin(min_y, value, first_p, 0);
+                max_y = GetMax(max_y, value, first_p, 0);
+            }
+            break;
+
+        case 2:
+            value = f(x);
+            min_y = GetMin(min_y, value, first_p, 1);
+            max_y = GetMax(max_y, value, first_p, 1);
+            if (is_first_method) {
+                value = EvaluationMethod11(x, a_scaled, b_scaled, n, X, A1);
+                min_y = GetMin(min_y, value, first_p, 0);
+                max_y = GetMax(max_y, value, first_p, 0);
+            }
+            if (is_second_method) {
+                value = EvaluationMethod36(x, a_scaled, b_scaled, n, X, A2);
+                min_y = GetMin(min_y, value, first_p, 0);
+                max_y = GetMax(max_y, value, first_p, 0);
+            }
+            break;
+
+        case 3:
+            if (is_first_method) {
+                value = std::fabs(
+                    EvaluationMethod11(x, a_scaled, b_scaled, n, X, A1) - f(x));
+                min_y = GetMin(min_y, value, first_p, 1);
+                max_y = GetMax(max_y, value, first_p, 1);
+                first_p = false;
+            }
+            if (is_second_method) {
+                value = std::fabs(
+                    EvaluationMethod36(x, a_scaled, b_scaled, n, X, A2) - f(x));
+                min_y = GetMin(min_y, value, first_p, 1);
+                max_y = GetMax(max_y, value, first_p, 1);
+                first_p = false;
+            }
+            break;
+        }
+        first_p = false;
     }
 
-    initialized = false;
-    min_y = 0.0;
-    max_y = 0.0;
+    for (int kk = 0; kk < 2; ++kk) {
+        double x = (kk == 0) ? a_scaled : b_scaled;
 
-    for (i = 0; i <= samples; ++i) {
-        x = left + (right - left) * (double)i / (double)samples;
-        y_function = 0.0;
-        y_method_11 = 0.0;
-        y_method_36 = 0.0;
-
-        if (graph_mode != GRAPH_MODE_ERRORS) {
-            y_function = exact_value(x);
-            if (!initialized) {
-                min_y = y_function;
-                max_y = y_function;
-                initialized = true;
-            }
-            if (y_function < min_y) {
-                min_y = y_function;
-            }
-            if (y_function > max_y) {
-                max_y = y_function;
-            }
+        if (display != 3) {
+            value = f(x);
+            min_y = GetMin(min_y, value, first_p, 0);
+            max_y = GetMax(max_y, value, first_p, 0);
         }
-
-        if ((graph_mode == GRAPH_MODE_METHOD_11 ||
-             graph_mode == GRAPH_MODE_BOTH) &&
-            is_inside_interval(x, a, b)) {
-            y_method_11 = method_11_value(x);
-            if (y_method_11 < min_y) {
-                min_y = y_method_11;
+        if (is_first_method) {
+            if (display != 3) {
+                value = EvaluationMethod11(x, a_scaled, b_scaled, n, X, A1);
+            } else {
+                value = std::fabs(
+                    EvaluationMethod11(x, a_scaled, b_scaled, n, X, A1) - f(x));
             }
-            if (y_method_11 > max_y) {
-                max_y = y_method_11;
-            }
+            min_y = GetMin(min_y, value, first_p, 0);
+            max_y = GetMax(max_y, value, first_p, 0);
         }
-
-        if ((graph_mode == GRAPH_MODE_METHOD_36 ||
-             graph_mode == GRAPH_MODE_BOTH) &&
-            is_inside_interval(x, a, b)) {
-            y_method_36 = method_36_value(x);
-            if (y_method_36 < min_y) {
-                min_y = y_method_36;
+        if (is_second_method) {
+            if (display != 3) {
+                value = EvaluationMethod36(x, a_scaled, b_scaled, n, X, A2);
+            } else {
+                value = std::fabs(
+                    EvaluationMethod36(x, a_scaled, b_scaled, n, X, A2) - f(x));
             }
-            if (y_method_36 > max_y) {
-                max_y = y_method_36;
-            }
-        }
-
-        if (graph_mode == GRAPH_MODE_ERRORS && is_inside_interval(x, a, b)) {
-            y_function = exact_value(x);
-            y_method_11 = method_11_value(x);
-            y = display_error_value(y_method_11 - y_function);
-            if (!initialized) {
-                min_y = y;
-                max_y = y;
-                initialized = true;
-            }
-            if (y < min_y) {
-                min_y = y;
-            }
-            if (y > max_y) {
-                max_y = y;
-            }
-
-            y_method_36 = method_36_value(x);
-            y = display_error_value(y_method_36 - y_function);
-            if (y < min_y) {
-                min_y = y;
-            }
-            if (y > max_y) {
-                max_y = y;
-            }
+            min_y = GetMin(min_y, value, first_p, 0);
+            max_y = GetMax(max_y, value, first_p, 0);
         }
     }
 
@@ -410,176 +328,237 @@ void Window::paintEvent(QPaintEvent * /* event */)
     if (std::fabs(max_y) > max_abs) {
         max_abs = std::fabs(max_y);
     }
+    max_f = max_abs;
 
-    if (graph_mode == GRAPH_MODE_ERRORS && max_abs < ERROR_DISPLAY_EPS) {
-        min_y = -ERROR_DISPLAY_EPS;
-        max_y = ERROR_DISPLAY_EPS;
+    double delta_y = 0.05 * (max_y - min_y);
+    if (delta_y < EPS) {
+        delta_y = 1.0;
     }
-
-    if (min_y > 0.0) {
-        min_y = 0.0;
-    }
-    if (max_y < 0.0) {
-        max_y = 0.0;
-    }
-
-    if (min_y == max_y) {
-        min_y -= 1.0;
-        max_y += 1.0;
-    }
-
-    y = 0.05 * (max_y - min_y);
-    min_y -= y;
-    max_y += y;
-
-    std::printf("mode=%s k=%d n=%d scale=%d perturbation=%d max_abs=%.16e\n",
-                graph_mode_name(), func_id, n, scale_power, perturbation,
-                max_abs);
+    min_y -= delta_y;
+    max_y += delta_y;
 
     painter.save();
-    painter.translate(0.5 * width(), 0.5 * height());
-    painter.scale(width() / (right - left), -height() / (max_y - min_y));
-    painter.translate(-0.5 * (left + right), -0.5 * (min_y + max_y));
+    painter.translate(0, height());
+    painter.scale(width() / (b_scaled - a_scaled), -height() / (max_y - min_y));
+    painter.translate(-a_scaled, -min_y);
 
+    QPen pen("black");
     pen.setWidth(0);
-
-    pen.setColor(Qt::red);
     painter.setPen(pen);
-    painter.drawLine(QPointF(left, 0.0), QPointF(right, 0.0));
-    painter.drawLine(QPointF(0.0, min_y), QPointF(0.0, max_y));
 
-    if (graph_mode != GRAPH_MODE_ERRORS) {
-        points.clear();
-        points.reserve(samples + 1);
-        pen.setColor(Qt::black);
-        painter.setPen(pen);
-        for (i = 0; i <= samples; ++i) {
-            x = left + (right - left) * (double)i / (double)samples;
-            y_current = exact_value(x);
-            points.append(QPointF(x, y_current));
+    switch (display) {
+    case 0:
+        DrawingFunction(painter, a_scaled, b_scaled, delta_x);
+        if (is_first_method) {
+            DrawingApproximation(painter, a_scaled, b_scaled, delta_x, n, X, A1, 1);
         }
-        painter.drawPolyline(points);
+        break;
+    case 1:
+        DrawingFunction(painter, a_scaled, b_scaled, delta_x);
+        if (is_second_method) {
+            DrawingApproximation(painter, a_scaled, b_scaled, delta_x, n, X, A2, 2);
+        }
+        break;
+    case 2:
+        DrawingFunction(painter, a_scaled, b_scaled, delta_x);
+        if (is_first_method) {
+            DrawingApproximation(painter, a_scaled, b_scaled, delta_x, n, X, A1, 1);
+        }
+        if (is_second_method) {
+            DrawingApproximation(painter, a_scaled, b_scaled, delta_x, n, X, A2, 2);
+        }
+        break;
+    case 3:
+        if (is_first_method) {
+            DrawingError(painter, a_scaled, b_scaled, delta_x, n, X, A1, 1);
+        }
+        if (is_second_method) {
+            DrawingError(painter, a_scaled, b_scaled, delta_x, n, X, A2, 2);
+        }
+        break;
     }
 
-    if (graph_mode == GRAPH_MODE_METHOD_11 || graph_mode == GRAPH_MODE_BOTH ||
-        graph_mode == GRAPH_MODE_ERRORS) {
-        points.clear();
-        points.reserve(samples + 1);
-        pen.setColor(Qt::blue);
-        painter.setPen(pen);
-        for (i = 0; i <= samples; ++i) {
-            x = left + (right - left) * (double)i / (double)samples;
-            if (is_inside_interval(x, a, b)) {
-                if (graph_mode == GRAPH_MODE_ERRORS) {
-                    y_current = display_error_value(method_11_value(x) -
-                                                    exact_value(x));
-                } else {
-                    y_current = method_11_value(x);
-                }
-                points.append(QPointF(x, y_current));
-            } else if (points.size() > 1) {
-                painter.drawPolyline(points);
-                points.clear();
-            } else {
-                points.clear();
-            }
-        }
-        if (points.size() > 1) {
-            painter.drawPolyline(points);
-        }
-    }
-
-    if (graph_mode == GRAPH_MODE_METHOD_36 || graph_mode == GRAPH_MODE_BOTH ||
-        graph_mode == GRAPH_MODE_ERRORS) {
-        points.clear();
-        points.reserve(samples + 1);
-        pen.setColor(Qt::darkGreen);
-        painter.setPen(pen);
-        for (i = 0; i <= samples; ++i) {
-            x = left + (right - left) * (double)i / (double)samples;
-            if (is_inside_interval(x, a, b)) {
-                if (graph_mode == GRAPH_MODE_ERRORS) {
-                    y_current = display_error_value(method_36_value(x) -
-                                                    exact_value(x));
-                } else {
-                    y_current = method_36_value(x);
-                }
-                points.append(QPointF(x, y_current));
-            } else if (points.size() > 1) {
-                painter.drawPolyline(points);
-                points.clear();
-            } else {
-                points.clear();
-            }
-        }
-        if (points.size() > 1) {
-            painter.drawPolyline(points);
-        }
-    }
-
+    pen.setColor("black");
+    painter.setPen(pen);
+    painter.drawLine(a_scaled, 0, b_scaled, 0);
+    painter.drawLine(0, min_y, 0, max_y);
     painter.restore();
 
-    painter.setPen(Qt::black);
-    text_y = 20;
-    info = QString("k=%1  f(x)=%2").arg(func_id).arg(function_name(func_id));
-    painter.drawText(10, text_y, info);
-    text_y += 20;
-    info = QString("n=%1  mode=%2").arg(n).arg(graph_mode_name());
-    painter.drawText(10, text_y, info);
-    text_y += 20;
-    info = QString("scale=%1  interval=[%2,%3]")
-               .arg(scale_power)
-               .arg(left, 0, 'g', 4)
-               .arg(right, 0, 'g', 4);
-    painter.drawText(10, text_y, info);
-    text_y += 20;
-    info = QString("perturbation=%1  max_abs=%2")
-               .arg(perturbation)
-               .arg(max_abs, 0, 'e', 3);
-    painter.drawText(10, text_y, info);
-    text_y += 20;
-    painter.drawText(10, text_y,
-                     "keys: 0 func, 1 mode, 2/3 zoom, 4/5 n, 6/7 perturb");
-    text_y += 20;
-    painter.setPen(Qt::black);
-    painter.drawText(10, text_y, "black: f(x)");
-    text_y += 20;
-    painter.setPen(Qt::blue);
-    painter.drawText(10, text_y, "blue: method 11");
-    text_y += 20;
-    painter.setPen(Qt::darkGreen);
-    painter.drawText(10, text_y, "green: method 36");
+    painter.setPen("black");
+    painter.drawText(10, 20, QString("k=%1, %2").arg(k).arg(f_name));
+    painter.drawText(10, 40, QString("max|f| = %1").arg(max_abs));
+    painter.drawText(10, 60, QString("scale = %1").arg(scale));
+    painter.drawText(10, 80, QString("n = %1").arg(n));
+    painter.drawText(10, 100, QString("perturbation p = %1").arg(perturbation));
+    painter.drawText(10, 120, QString("display = %1").arg(display));
+
+    if (is_second_method) {
+        double residual = 0.0;
+        for (double x_val = a_scaled; x_val <= b_scaled; x_val += delta_x) {
+            error = std::fabs(
+                EvaluationMethod36(x_val, a_scaled, b_scaled, n, X, A2) - f(x_val));
+            if (error > residual) {
+                residual = error;
+            }
+        }
+        painter.drawText(10, 140,
+                         QString("residual (method 36) = %1").arg(residual));
+    }
+
+    if (display == 3) {
+        pos = 160;
+        if (is_first_method) {
+            for (double x = a_scaled; x <= b_scaled; x += delta_x) {
+                temp = std::fabs(
+                    EvaluationMethod11(x, a_scaled, b_scaled, n, X, A1) - f(x));
+                if (temp > error1) {
+                    error1 = temp;
+                }
+            }
+            painter.drawText(10, pos,
+                             QString("error (method 11) = %1").arg(error1));
+            pos += 20;
+        }
+        if (is_second_method) {
+            for (double x = a_scaled; x <= b_scaled; x += delta_x) {
+                temp = std::fabs(
+                    EvaluationMethod36(x, a_scaled, b_scaled, n, X, A2) - f(x));
+                if (temp > error2) {
+                    error2 = temp;
+                }
+            }
+            painter.drawText(10, pos,
+                             QString("error (method 36) = %1").arg(error2));
+        }
+    }
+
+    delete[] X;
+    delete[] F;
+    delete[] A1;
+    delete[] A2;
+    delete[] extra1;
+    delete[] extra2;
 }
+
+
+void Window::DrawingFunction(QPainter &painter, double a, double b, double dx)
+{
+    double x1 = a;
+    double y1 = f(x1);
+    QPen pen("green");
+    pen.setWidth(0);
+    painter.setPen(pen);
+    for (double x2 = x1 + dx; x2 <= b + dx * 0.5; x2 += dx) {
+        painter.drawLine(QPointF(x1, y1), QPointF(x2, f(x2)));
+        x1 = x2;
+        y1 = f(x2);
+    }
+}
+
+void Window::DrawingApproximation(QPainter &painter, double a, double b,
+                                  double dx, int n, const double *X,
+                                  const double *A, int m)
+{
+    double x1 = a;
+    double y1;
+    double y2;
+    QPen pen = (m == 1) ? QColor("red") : QColor("blue");
+    pen.setWidth(0);
+    painter.setPen(pen);
+
+    if (m == 1) {
+        y1 = EvaluationMethod11(x1, a, b, n, X, A);
+    } else {
+        y1 = EvaluationMethod36(x1, a, b, n, X, A);
+    }
+
+    for (double x2 = x1 + dx; x2 <= b; x2 += dx) {
+        if (m == 1) {
+            y2 = EvaluationMethod11(x2, a, b, n, X, A);
+        } else {
+            y2 = EvaluationMethod36(x2, a, b, n, X, A);
+        }
+        painter.drawLine(QPointF(x1, y1), QPointF(x2, y2));
+        x1 = x2;
+        y1 = y2;
+    }
+}
+
+void Window::DrawingError(QPainter &painter, double a, double b, double dx,
+                          int n, const double *X, const double *A, int m)
+{
+    double x1 = a;
+    double y1;
+    double y2;
+    QPen pen = (m == 1) ? QColor("red") : QColor("blue");
+    pen.setWidth(0);
+    painter.setPen(pen);
+
+    if (m == 1) {
+        y1 = std::fabs(EvaluationMethod11(x1, a, b, n, X, A) - f(x1));
+    } else {
+        y1 = std::fabs(EvaluationMethod36(x1, a, b, n, X, A) - f(x1));
+    }
+
+    for (double x2 = x1 + dx; x2 <= b; x2 += dx) {
+        if (m == 1) {
+            y2 = std::fabs(EvaluationMethod11(x2, a, b, n, X, A) - f(x2));
+        } else {
+            y2 = std::fabs(EvaluationMethod36(x2, a, b, n, X, A) - f(x2));
+        }
+        painter.drawLine(QPointF(x1, y1), QPointF(x2, y2));
+        x1 = x2;
+        y1 = y2;
+    }
+}
+
 
 void Window::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
     case Qt::Key_0:
+        k = (k + 1) % 7;
+        func_id = k;
         change_func();
         break;
     case Qt::Key_1:
-        change_graph_mode();
+        display = (display + 1) % 4;
+        update();
         break;
     case Qt::Key_2:
-        zoom_in();
+        scale++;
+        if (scale > 20) scale = 20;
+        update();
         break;
     case Qt::Key_3:
-        zoom_out();
+        scale--;
+        if (scale < -10) scale = -10;
+        update();
         break;
     case Qt::Key_4:
-        increase_n();
+        if (n <= MAXIMAL_N / 2) {
+            n *= 2;
+        } else {
+            n = MAXIMAL_N;
+        }
+        update();
         break;
     case Qt::Key_5:
-        decrease_n();
+        n /= 2;
+        if (n < 2) n = 2;
+        update();
         break;
     case Qt::Key_6:
-        increase_perturbation();
+        perturbation++;
+        if (perturbation > 50) perturbation = 50;
+        update();
         break;
     case Qt::Key_7:
-        decrease_perturbation();
+        perturbation--;
+        if (perturbation < -50) perturbation = -50;
+        update();
         break;
     default:
         QWidget::keyPressEvent(event);
-        break;
     }
 }
