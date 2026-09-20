@@ -3,41 +3,35 @@
 
 #include <QWidget>
 
-#define GRAPH_MODE_METHOD_11 0
-#define GRAPH_MODE_METHOD_36 1
-#define GRAPH_MODE_BOTH 2
-#define GRAPH_MODE_ERRORS 3
-
 class Window : public QWidget
 {
     Q_OBJECT
 
   private:
+    int func_id;
+    const char *f_name;
     double a;
     double b;
     int n;
-    int func_id;
-    int graph_mode;
-    int scale_power;
-    int perturbation;
-    int approximation_error;
+    int k;
 
-    double *derivatives_11;
-    double *derivatives_36;
+    double (*f)(double);    /* сама функция */
+    double (*df)(double);   /* первая производная  — для метода 11 */
+    double (*d2f)(double);  /* вторая производная  — для метода 36 */
 
-    void free_memory();
-    int allocate_memory();
-    int rebuild_approximation();
-    double exact_value(double x) const;
-    double method_11_value(double x) const;
-    double method_36_value(double x) const;
-    double perturbation_step() const;
-    void get_visible_interval(double *left, double *right) const;
-    const char *graph_mode_name() const;
+    int display;            /* 0..3 — что показывать */
+    int scale;              /* масштаб по X */
+    int perturbation;       /* p — возмущение f(x_{n/2}) */
+    double max_f;           /* max|f| на [a, b] — для возмущения */
+
+    void DrawingFunction(QPainter &painter, double a, double b, double dx);
+    void DrawingApproximation(QPainter &painter, double a, double b, double dx,
+                              int n, const double *X, const double *A, int m);
+    void DrawingError(QPainter &painter, double a, double b, double dx,
+                      int n, const double *X, const double *A, int m);
 
   public:
     explicit Window(QWidget *parent);
-    ~Window();
 
     QSize minimumSizeHint() const;
     QSize sizeHint() const;
@@ -46,13 +40,6 @@ class Window : public QWidget
 
   public slots:
     void change_func();
-    void change_graph_mode();
-    void zoom_in();
-    void zoom_out();
-    void increase_n();
-    void decrease_n();
-    void increase_perturbation();
-    void decrease_perturbation();
 
   protected:
     void paintEvent(QPaintEvent *event);
