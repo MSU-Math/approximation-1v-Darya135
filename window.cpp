@@ -1,10 +1,9 @@
 #include "window.h"
 #include "inter_app.h"
-
 #include <QKeyEvent>
 #include <QPainter>
 #include <cmath>
-#include <cstdio>
+#include <stdio.h>
 
 #define DEFAULT_A -10
 #define DEFAULT_B 10
@@ -12,71 +11,6 @@
 #define DEFAULT_K 0
 #define EPS 1e-16
 #define MAXIMAL_N 10000000
-
-/* ------------------------------------------------------------------ */
-/*  семь функций и их производные                                     */
-/* ------------------------------------------------------------------ */
-
-static double f_0(double x)  { (void)x; return 1.0; }
-static double df_0(double x) { (void)x; return 0.0; }
-static double d2f_0(double x){ (void)x; return 0.0; }
-
-static double f_1(double x)  { return x; }
-static double df_1(double x) { (void)x; return 1.0; }
-static double d2f_1(double x){ (void)x; return 0.0; }
-
-static double f_2(double x)  { return x * x; }
-static double df_2(double x) { return 2.0 * x; }
-static double d2f_2(double x){ (void)x; return 2.0; }
-
-static double f_3(double x)  { return x * x * x; }
-static double df_3(double x) { return 3.0 * x * x; }
-static double d2f_3(double x){ return 6.0 * x; }
-
-static double f_4(double x)  { return x * x * x * x; }
-static double df_4(double x) { return 4.0 * x * x * x; }
-static double d2f_4(double x){ return 12.0 * x * x; }
-
-static double f_5(double x)
-{
-    if (std::fabs(x) > 512.0) {
-        return 0.0;
-    }
-    return std::exp(x);
-}
-static double df_5(double x)
-{
-    if (std::fabs(x) > 512.0) {
-        return 0.0;
-    }
-    return std::exp(x);
-}
-static double d2f_5(double x)
-{
-    if (std::fabs(x) > 512.0) {
-        return 0.0;
-    }
-    return std::exp(x);
-}
-
-static double f_6(double x)
-{
-    return 1.0 / (25.0 * x * x + 1.0);
-}
-static double df_6(double x)
-{
-    double d = 25.0 * x * x + 1.0;
-    return -50.0 * x / (d * d);
-}
-static double d2f_6(double x)
-{
-    double d = 25.0 * x * x + 1.0;
-    return (3750.0 * x * x - 50.0) / (d * d * d);
-}
-
-/* ------------------------------------------------------------------ */
-/*  вспомогательные минимум/максимум                                  */
-/* ------------------------------------------------------------------ */
 
 static double GetMin(double y1, double y2, bool fp, int nes)
 {
@@ -94,9 +28,49 @@ static double GetMax(double y1, double y2, bool fp, int nes)
     return (y1 > y2) ? y1 : y2;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Window                                                            */
-/* ------------------------------------------------------------------ */
+static double f_0(double x)  { return 1.0 + 0.0 * x; }
+static double f_1(double x)  { return x; }
+static double f_2(double x)  { return pow(x, 2); }
+static double f_3(double x)  { return pow(x, 3); }
+static double f_4(double x)  { return pow(x, 4); }
+static double f_5(double x)
+{
+    if (fabs(x) > pow(2, 9)) return x * 0.0;
+    return exp(x);
+}
+static double f_6(double x) { return 1 / (25 * x * x + 1); }
+
+static double df_0(double x)  { (void)x; return 0.0; }
+static double df_1(double x)  { (void)x; return 1.0; }
+static double df_2(double x)  { return 2.0 * x; }
+static double df_3(double x)  { return 3.0 * x * x; }
+static double df_4(double x)  { return 4.0 * x * x * x; }
+static double df_5(double x)
+{
+    if (fabs(x) > pow(2, 9)) return 0.0;
+    return exp(x);
+}
+static double df_6(double x)
+{
+    double d = 25.0 * x * x + 1.0;
+    return -50.0 * x / (d * d);
+}
+
+static double d2f_0(double x) { (void)x; return 0.0; }
+static double d2f_1(double x) { (void)x; return 0.0; }
+static double d2f_2(double x) { (void)x; return 2.0; }
+static double d2f_3(double x) { return 6.0 * x; }
+static double d2f_4(double x) { return 12.0 * x * x; }
+static double d2f_5(double x)
+{
+    if (fabs(x) > pow(2, 9)) return 0.0;
+    return exp(x);
+}
+static double d2f_6(double x)
+{
+    double d = 25.0 * x * x + 1.0;
+    return (3750.0 * x * x - 50.0) / (d * d * d);
+}
 
 Window::Window(QWidget *parent) : QWidget(parent)
 {
@@ -105,20 +79,81 @@ Window::Window(QWidget *parent) : QWidget(parent)
     n = DEFAULT_N;
     k = DEFAULT_K;
     func_id = k;
-
     f = f_0;
     df = df_0;
     d2f = d2f_0;
     f_name = "f (x) = 1";
-
     display = 0;
     scale = 0;
     perturbation = 0;
     max_f = 0.0;
 
+    cache_valid = false;
+    cache_a = cache_b = 0.0;
+    cache_n = cache_k = cache_perturbation = cache_scale = 0;
+    cache_11 = cache_36 = false;
+    cache_X = cache_F = cache_A1 = cache_A2 = 0;
+
     setFocusPolicy(Qt::StrongFocus);
-    /* Намеренно не вызываем change_func() здесь —
-     * parse_command_line сделает это один раз с нужными аргументами. */
+}
+
+Window::~Window()
+{
+    free_cache();
+}
+
+void Window::free_cache()
+{
+    delete[] cache_X;
+    delete[] cache_F;
+    delete[] cache_A1;
+    delete[] cache_A2;
+    cache_X = cache_F = cache_A1 = cache_A2 = 0;
+    cache_valid = false;
+}
+
+void Window::build_cache(double a_scaled, double b_scaled, double *extra)
+{
+    free_cache();
+
+    cache_X = new double[n];
+    cache_F = new double[n];
+
+    double step = (b_scaled - a_scaled) / (n - 1);
+    for (int i = 0; i < n; i++) {
+        cache_X[i] = a_scaled + i * step;
+        cache_F[i] = f(cache_X[i]);
+        if (i == n / 2 && max_f > EPS) {
+            cache_F[i] += perturbation * 0.1 * max_f;
+        }
+    }
+
+    bool need_11 = (display == 0 || display == 2 || display == 3);
+    bool need_36 = (display == 1 || display == 2 || display == 3);
+
+    cache_11 = cache_36 = false;
+    if (need_11 && n >= 2) {
+        cache_A1 = new double[n];
+        if (BuildingMethod11(n, cache_X, cache_F, cache_A1, extra,
+                             df(cache_X[0]), df(cache_X[n - 1])) == 0) {
+            cache_11 = true;
+        }
+    }
+    if (need_36 && n >= 2) {
+        cache_A2 = new double[n];
+        if (BuildingMethod36(n, cache_X, cache_F, cache_A2, extra,
+                             d2f(cache_X[0]), d2f(cache_X[n - 1])) == 0) {
+            cache_36 = true;
+        }
+    }
+
+    cache_a = a;
+    cache_b = b;
+    cache_n = n;
+    cache_k = func_id;
+    cache_perturbation = perturbation;
+    cache_scale = scale;
+    cache_valid = true;
 }
 
 QSize Window::minimumSizeHint() const { return QSize(100, 100); }
@@ -154,135 +189,81 @@ void Window::change_func()
 
     switch (func_id) {
     case 0:
-        f_name = "f (x) = 1";
-        f = f_0; df = df_0; d2f = d2f_0;
-        break;
+        f_name = "f (x) = 1";  f = f_0; df = df_0; d2f = d2f_0; break;
     case 1:
-        f_name = "f (x) = x";
-        f = f_1; df = df_1; d2f = d2f_1;
-        break;
+        f_name = "f (x) = x";  f = f_1; df = df_1; d2f = d2f_1; break;
     case 2:
-        f_name = "f (x) = x^2";
-        f = f_2; df = df_2; d2f = d2f_2;
-        break;
+        f_name = "f (x) = x^2"; f = f_2; df = df_2; d2f = d2f_2; break;
     case 3:
-        f_name = "f (x) = x^3";
-        f = f_3; df = df_3; d2f = d2f_3;
-        break;
+        f_name = "f (x) = x^3"; f = f_3; df = df_3; d2f = d2f_3; break;
     case 4:
-        f_name = "f (x) = x^4";
-        f = f_4; df = df_4; d2f = d2f_4;
-        break;
+        f_name = "f (x) = x^4"; f = f_4; df = df_4; d2f = d2f_4; break;
     case 5:
-        f_name = "f (x) = e^x";
-        f = f_5; df = df_5; d2f = d2f_5;
-        break;
+        f_name = "f (x) = e^x"; f = f_5; df = df_5; d2f = d2f_5; break;
     case 6:
-        f_name = "f (x) = 1/(25*x^2 + 1)";
-        f = f_6; df = df_6; d2f = d2f_6;
-        break;
+        f_name = "f (x) = 1/(25*x^2 + 1)"; f = f_6; df = df_6; d2f = d2f_6; break;
     }
+    cache_valid = false;
     update();
 }
-
-/* ------------------------------------------------------------------ */
-/*  отрисовка                                                         */
-/* ------------------------------------------------------------------ */
 
 void Window::paintEvent(QPaintEvent * /* event */)
 {
     QPainter painter(this);
-
-    double s = std::pow(2.0, scale);
+    double s = pow(2.0, scale);
     double a_scaled = a / s;
     double b_scaled = b / s;
 
     double delta_x = (b_scaled - a_scaled) / n;
-    double min_y = 0.0;
-    double max_y = 0.0;
-    double value = 0.0;
-    double error1 = 0.0;
-    double error2 = 0.0;
-    double error = 0.0;
-    double temp = 0.0;
-    double max_abs = 0.0;
-    int pos = 160;
-
-    double *X = nullptr;
-    double *F = nullptr;
-    double *A1 = nullptr;
-    double *A2 = nullptr;
-    double *extra1 = nullptr;
-    double *extra2 = nullptr;
-
-    bool is_first_method = false;
-    bool is_second_method = false;
-    bool first_p = true;
-
-    int draw_points = (n <= 50) ? (n * 10) : 1000;
+    int draw_points = 1000;
+    if (n <= 50) {
+        draw_points = n * 10;
+    }
     if (draw_points < 100) {
         draw_points = 100;
     }
     delta_x = (b_scaled - a_scaled) / draw_points;
 
-    /* ---- максимальное |f| на видимом интервале --------------------- */
-    /* Это именно max|f|, независимо от того, что показывается сейчас.  */
+    /* --- max|f| на видимом интервале --- */
     double max_f_global = 0.0;
     for (double xx = a_scaled; xx <= b_scaled; xx += delta_x) {
-        double vv = std::fabs(f(xx));
+        double vv = fabs(f(xx));
         if (vv > max_f_global) {
             max_f_global = vv;
         }
     }
     max_f = max_f_global;
+    printf("max|f| = %.16e\n", max_f);
 
-    /* ---- печать max|f| в консоль (только при изменении) ------------ */
-    {
-        static double last_max_f = -1.0;
-        if (std::fabs(last_max_f - max_f) > 1e-12) {
-            std::printf("max|f| = %.16e\n", max_f);
-            last_max_f = max_f;
-        }
+    /* --- перестроить кэш только если параметры изменились --- */
+    bool params_changed =
+        !cache_valid || cache_a != a || cache_b != b || cache_n != n ||
+        cache_k != func_id || cache_perturbation != perturbation ||
+        cache_scale != scale;
+
+    if (params_changed) {
+        double *extra = new double[n];
+        build_cache(a_scaled, b_scaled, extra);
+        delete[] extra;
     }
 
-    /* ---- подготовка узлов X[] и значений F[] ----------------------- */
-    X = new double[n];
-    F = new double[n];
-    double step = (b_scaled - a_scaled) / (n - 1);
-    for (int i = 0; i < n; ++i) {
-        X[i] = a_scaled + i * step;
-        F[i] = f(X[i]);
-        if (i == n / 2 && max_f > EPS) {
-            F[i] += perturbation * 0.1 * max_f;
-        }
-    }
+    double *X = cache_X;
+    double *F = cache_F;
+    double *A1 = cache_A1;
+    double *A2 = cache_A2;
+    bool is_first_method = cache_11;
+    bool is_second_method = cache_36;
 
-    /* ---- строим только тот метод, который реально показывается ----- */
-    bool need_11 = (display == 0 || display == 2 || display == 3);
-    bool need_36 = (display == 1 || display == 2 || display == 3);
+    double max_abs = 0.0;
+    double min_y = 0.0;
+    double max_y = 0.0;
+    double value = 0.0;
+    double error = 0.0;
+    double temp = 0.0;
+    double error1 = 0.0;
+    double error2 = 0.0;
+    bool first_p = true;
 
-    if (n >= 2 && need_11) {
-        A1 = new double[4 * (n - 1)];
-        extra1 = new double[2 * n];
-        if (BuildingMethod11(n, X, F, A1, extra1, df(X[0]), df(X[n - 1])) == 0) {
-            is_first_method = true;
-        }
-    }
-    if (n >= 2 && need_36) {
-        A2 = new double[4 * (n - 1)];
-        extra2 = new double[2 * n];
-        if (BuildingMethod36(n, X, F, A2, extra2, d2f(X[0]), d2f(X[n - 1])) == 0) {
-            is_second_method = true;
-        }
-    }
-
-    /* F и extra[] больше не нужны — освобождаем сразу,
-     * чтобы не держать лишние ~400 МБ при n = 10^7. */
-    delete[] F;       F = nullptr;
-    delete[] extra1;  extra1 = nullptr;
-    delete[] extra2;  extra2 = nullptr;
-
-    /* ---- проход 1: определяем min_y/max_y -------------------------- */
     for (double x = a_scaled; x <= b_scaled; x += delta_x) {
         switch (display) {
         case 0:
@@ -290,50 +271,45 @@ void Window::paintEvent(QPaintEvent * /* event */)
             min_y = GetMin(min_y, value, first_p, 1);
             max_y = GetMax(max_y, value, first_p, 1);
             if (is_first_method) {
-                value = EvaluationMethod11(x, a_scaled, b_scaled, n, X, A1);
+                value = EvaluationMethod11(x, a_scaled, b_scaled, n, X, F, A1);
                 min_y = GetMin(min_y, value, first_p, 0);
                 max_y = GetMax(max_y, value, first_p, 0);
             }
             break;
-
         case 1:
             value = f(x);
             min_y = GetMin(min_y, value, first_p, 1);
             max_y = GetMax(max_y, value, first_p, 1);
             if (is_second_method) {
-                value = EvaluationMethod36(x, a_scaled, b_scaled, n, X, A2);
+                value = EvaluationMethod36(x, a_scaled, b_scaled, n, X, F, A2);
                 min_y = GetMin(min_y, value, first_p, 0);
                 max_y = GetMax(max_y, value, first_p, 0);
             }
             break;
-
         case 2:
             value = f(x);
             min_y = GetMin(min_y, value, first_p, 1);
             max_y = GetMax(max_y, value, first_p, 1);
             if (is_first_method) {
-                value = EvaluationMethod11(x, a_scaled, b_scaled, n, X, A1);
+                value = EvaluationMethod11(x, a_scaled, b_scaled, n, X, F, A1);
                 min_y = GetMin(min_y, value, first_p, 0);
                 max_y = GetMax(max_y, value, first_p, 0);
             }
             if (is_second_method) {
-                value = EvaluationMethod36(x, a_scaled, b_scaled, n, X, A2);
+                value = EvaluationMethod36(x, a_scaled, b_scaled, n, X, F, A2);
                 min_y = GetMin(min_y, value, first_p, 0);
                 max_y = GetMax(max_y, value, first_p, 0);
             }
             break;
-
         case 3:
             if (is_first_method) {
-                value = std::fabs(
-                    EvaluationMethod11(x, a_scaled, b_scaled, n, X, A1) - f(x));
+                value = fabs(EvaluationMethod11(x, a_scaled, b_scaled, n, X, F, A1) - f(x));
                 min_y = GetMin(min_y, value, first_p, 1);
                 max_y = GetMax(max_y, value, first_p, 1);
                 first_p = false;
             }
             if (is_second_method) {
-                value = std::fabs(
-                    EvaluationMethod36(x, a_scaled, b_scaled, n, X, A2) - f(x));
+                value = fabs(EvaluationMethod36(x, a_scaled, b_scaled, n, X, F, A2) - f(x));
                 min_y = GetMin(min_y, value, first_p, 1);
                 max_y = GetMax(max_y, value, first_p, 1);
                 first_p = false;
@@ -343,10 +319,8 @@ void Window::paintEvent(QPaintEvent * /* event */)
         first_p = false;
     }
 
-    /* ---- граничные точки ------------------------------------------- */
-    for (int kk = 0; kk < 2; ++kk) {
+    for (int kk = 0; kk < 2; kk++) {
         double x = (kk == 0) ? a_scaled : b_scaled;
-
         if (display != 3) {
             value = f(x);
             min_y = GetMin(min_y, value, first_p, 0);
@@ -354,31 +328,27 @@ void Window::paintEvent(QPaintEvent * /* event */)
         }
         if (is_first_method) {
             if (display != 3) {
-                value = EvaluationMethod11(x, a_scaled, b_scaled, n, X, A1);
+                value = EvaluationMethod11(x, a_scaled, b_scaled, n, X, F, A1);
             } else {
-                value = std::fabs(
-                    EvaluationMethod11(x, a_scaled, b_scaled, n, X, A1) - f(x));
+                value = fabs(EvaluationMethod11(x, a_scaled, b_scaled, n, X, F, A1) - f(x));
             }
             min_y = GetMin(min_y, value, first_p, 0);
             max_y = GetMax(max_y, value, first_p, 0);
         }
         if (is_second_method) {
             if (display != 3) {
-                value = EvaluationMethod36(x, a_scaled, b_scaled, n, X, A2);
+                value = EvaluationMethod36(x, a_scaled, b_scaled, n, X, F, A2);
             } else {
-                value = std::fabs(
-                    EvaluationMethod36(x, a_scaled, b_scaled, n, X, A2) - f(x));
+                value = fabs(EvaluationMethod36(x, a_scaled, b_scaled, n, X, F, A2) - f(x));
             }
             min_y = GetMin(min_y, value, first_p, 0);
             max_y = GetMax(max_y, value, first_p, 0);
         }
     }
 
-    /* max_abs — для масштабирования по Y.
-     * В режиме 3 это max|error|, в остальных — max отображаемых величин. */
-    max_abs = std::fabs(min_y);
-    if (std::fabs(max_y) > max_abs) {
-        max_abs = std::fabs(max_y);
+    max_abs = fabs(min_y);
+    if (fabs(max_y) > max_abs) {
+        max_abs = fabs(max_y);
     }
 
     double delta_y = 0.05 * (max_y - min_y);
@@ -388,12 +358,10 @@ void Window::paintEvent(QPaintEvent * /* event */)
     min_y -= delta_y;
     max_y += delta_y;
 
-    /* ---- собственно рисование -------------------------------------- */
     painter.save();
     painter.translate(0, height());
     painter.scale(width() / (b_scaled - a_scaled), -height() / (max_y - min_y));
     painter.translate(-a_scaled, -min_y);
-
     QPen pen("black");
     pen.setWidth(0);
     painter.setPen(pen);
@@ -402,41 +370,39 @@ void Window::paintEvent(QPaintEvent * /* event */)
     case 0:
         DrawingFunction(painter, a_scaled, b_scaled, delta_x);
         if (is_first_method) {
-            DrawingApproximation(painter, a_scaled, b_scaled, delta_x, n, X, A1, 1);
+            DrawingApproximation(painter, a_scaled, b_scaled, delta_x, n, X, F, A1, 1);
         }
         break;
     case 1:
         DrawingFunction(painter, a_scaled, b_scaled, delta_x);
         if (is_second_method) {
-            DrawingApproximation(painter, a_scaled, b_scaled, delta_x, n, X, A2, 2);
+            DrawingApproximation(painter, a_scaled, b_scaled, delta_x, n, X, F, A2, 2);
         }
         break;
     case 2:
         DrawingFunction(painter, a_scaled, b_scaled, delta_x);
         if (is_first_method) {
-            DrawingApproximation(painter, a_scaled, b_scaled, delta_x, n, X, A1, 1);
+            DrawingApproximation(painter, a_scaled, b_scaled, delta_x, n, X, F, A1, 1);
         }
         if (is_second_method) {
-            DrawingApproximation(painter, a_scaled, b_scaled, delta_x, n, X, A2, 2);
+            DrawingApproximation(painter, a_scaled, b_scaled, delta_x, n, X, F, A2, 2);
         }
         break;
     case 3:
         if (is_first_method) {
-            DrawingError(painter, a_scaled, b_scaled, delta_x, n, X, A1, 1);
+            DrawingError(painter, a_scaled, b_scaled, delta_x, n, X, F, A1, 1);
         }
         if (is_second_method) {
-            DrawingError(painter, a_scaled, b_scaled, delta_x, n, X, A2, 2);
+            DrawingError(painter, a_scaled, b_scaled, delta_x, n, X, F, A2, 2);
         }
         break;
     }
-
     pen.setColor("black");
     painter.setPen(pen);
     painter.drawLine(a_scaled, 0, b_scaled, 0);
     painter.drawLine(0, min_y, 0, max_y);
     painter.restore();
 
-    /* ---- надписи --------------------------------------------------- */
     painter.setPen("black");
     painter.drawText(10, 20, QString("k=%1, %2").arg(k).arg(f_name));
     painter.drawText(10, 40, QString("max|f| = %1").arg(max_f));
@@ -445,71 +411,48 @@ void Window::paintEvent(QPaintEvent * /* event */)
     painter.drawText(10, 100, QString("perturbation p = %1").arg(perturbation));
     painter.drawText(10, 120, QString("display = %1").arg(display));
 
-    if (is_second_method) {
-        double residual = 0.0;
-        for (double x_val = a_scaled; x_val <= b_scaled; x_val += delta_x) {
-            error = std::fabs(
-                EvaluationMethod36(x_val, a_scaled, b_scaled, n, X, A2) - f(x_val));
-            if (error > residual) {
-                residual = error;
-            }
-        }
-        painter.drawText(10, 140,
-                         QString("residual (method 36) = %1").arg(residual));
-    }
-
+    int pos = 160;
     if (display == 3) {
-        pos = 160;
         if (is_first_method) {
             for (double x = a_scaled; x <= b_scaled; x += delta_x) {
-                temp = std::fabs(
-                    EvaluationMethod11(x, a_scaled, b_scaled, n, X, A1) - f(x));
-                if (temp > error1) {
-                    error1 = temp;
-                }
+                temp = fabs(EvaluationMethod11(x, a_scaled, b_scaled, n, X, F, A1) - f(x));
+                if (temp > error1) error1 = temp;
             }
-            painter.drawText(10, pos,
-                             QString("error (method 11) = %1").arg(error1));
+            painter.drawText(10, pos, QString("error (method 11) = %1").arg(error1));
             pos += 20;
         }
         if (is_second_method) {
             for (double x = a_scaled; x <= b_scaled; x += delta_x) {
-                temp = std::fabs(
-                    EvaluationMethod36(x, a_scaled, b_scaled, n, X, A2) - f(x));
-                if (temp > error2) {
-                    error2 = temp;
-                }
+                temp = fabs(EvaluationMethod36(x, a_scaled, b_scaled, n, X, F, A2) - f(x));
+                if (temp > error2) error2 = temp;
             }
-            painter.drawText(10, pos,
-                             QString("error (method 36) = %1").arg(error2));
+            painter.drawText(10, pos, QString("error (method 36) = %1").arg(error2));
+            pos += 20;
+        }
+    } else {
+        double residual = 0.0;
+        if (is_second_method) {
+            for (double x = a_scaled; x <= b_scaled; x += delta_x) {
+                error = fabs(EvaluationMethod36(x, a_scaled, b_scaled, n, X, F, A2) - f(x));
+                if (error > residual) residual = error;
+            }
+            painter.drawText(10, pos, QString("residual (method 36) = %1").arg(residual));
             pos += 20;
         }
     }
 
-    /* ---- легенда --------------------------------------------------- */
-    painter.setPen(Qt::green);
-    painter.drawText(10, pos, "green: f(x)");
-    pos += 20;
+    painter.setPen(Qt::darkGreen);
+    painter.drawText(10, pos, "green: f(x)"); pos += 20;
     if (is_first_method) {
         painter.setPen(Qt::red);
-        painter.drawText(10, pos, "red: method 11 (clamped)");
-        pos += 20;
+        painter.drawText(10, pos, "red: method 11 (clamped)"); pos += 20;
     }
     if (is_second_method) {
         painter.setPen(Qt::blue);
-        painter.drawText(10, pos, "blue: method 36 (natural)");
-        pos += 20;
+        painter.drawText(10, pos, "blue: method 36 (natural)"); pos += 20;
     }
-
-    /* ---- освобождение памяти --------------------------------------- */
-    delete[] X;
-    delete[] A1;
-    delete[] A2;
+    painter.setPen(Qt::black);
 }
-
-/* ------------------------------------------------------------------ */
-/*  отрисовка составных частей                                        */
-/* ------------------------------------------------------------------ */
 
 void Window::DrawingFunction(QPainter &painter, double a, double b, double dx)
 {
@@ -527,26 +470,29 @@ void Window::DrawingFunction(QPainter &painter, double a, double b, double dx)
 
 void Window::DrawingApproximation(QPainter &painter, double a, double b,
                                   double dx, int n, const double *X,
-                                  const double *A, int m)
+                                  const double *F, const double *A, int m)
 {
     double x1 = a;
-    double y1;
-    double y2;
-    QPen pen = (m == 1) ? QColor("red") : QColor("blue");
+    double y1 = 0.0;
+    double y2 = 0.0;
+    QPen pen("black");
+    if (m == 1) {
+        pen = QColor("red");
+    } else {
+        pen = QColor("blue");
+    }
     pen.setWidth(0);
     painter.setPen(pen);
-
     if (m == 1) {
-        y1 = EvaluationMethod11(x1, a, b, n, X, A);
+        y1 = EvaluationMethod11(x1, a, b, n, X, F, A);
     } else {
-        y1 = EvaluationMethod36(x1, a, b, n, X, A);
+        y1 = EvaluationMethod36(x1, a, b, n, X, F, A);
     }
-
     for (double x2 = x1 + dx; x2 <= b; x2 += dx) {
-        if (m == 1) {
-            y2 = EvaluationMethod11(x2, a, b, n, X, A);
+        if (m == 2) {
+            y2 = EvaluationMethod36(x2, a, b, n, X, F, A);
         } else {
-            y2 = EvaluationMethod36(x2, a, b, n, X, A);
+            y2 = EvaluationMethod11(x2, a, b, n, X, F, A);
         }
         painter.drawLine(QPointF(x1, y1), QPointF(x2, y2));
         x1 = x2;
@@ -555,36 +501,36 @@ void Window::DrawingApproximation(QPainter &painter, double a, double b,
 }
 
 void Window::DrawingError(QPainter &painter, double a, double b, double dx,
-                          int n, const double *X, const double *A, int m)
+                          int n, const double *X, const double *F,
+                          const double *A, int m)
 {
     double x1 = a;
-    double y1;
-    double y2;
-    QPen pen = (m == 1) ? QColor("red") : QColor("blue");
+    double y2 = 0.0;
+    double y1 = 0.0;
+    QPen pen("black");
+    if (m == 1) {
+        pen = QColor("red");
+    } else {
+        pen = QColor("blue");
+    }
     pen.setWidth(0);
     painter.setPen(pen);
-
-    if (m == 1) {
-        y1 = std::fabs(EvaluationMethod11(x1, a, b, n, X, A) - f(x1));
+    if (m == 2) {
+        y1 = fabs(EvaluationMethod36(x1, a, b, n, X, F, A) - f(x1));
     } else {
-        y1 = std::fabs(EvaluationMethod36(x1, a, b, n, X, A) - f(x1));
+        y1 = fabs(EvaluationMethod11(x1, a, b, n, X, F, A) - f(x1));
     }
-
     for (double x2 = x1 + dx; x2 <= b; x2 += dx) {
-        if (m == 1) {
-            y2 = std::fabs(EvaluationMethod11(x2, a, b, n, X, A) - f(x2));
+        if (m == 2) {
+            y2 = fabs(EvaluationMethod36(x2, a, b, n, X, F, A) - f(x2));
         } else {
-            y2 = std::fabs(EvaluationMethod36(x2, a, b, n, X, A) - f(x2));
+            y2 = fabs(EvaluationMethod11(x2, a, b, n, X, F, A) - f(x2));
         }
         painter.drawLine(QPointF(x1, y1), QPointF(x2, y2));
         x1 = x2;
         y1 = y2;
     }
 }
-
-/* ------------------------------------------------------------------ */
-/*  клавиши                                                           */
-/* ------------------------------------------------------------------ */
 
 void Window::keyPressEvent(QKeyEvent *event)
 {
@@ -596,16 +542,19 @@ void Window::keyPressEvent(QKeyEvent *event)
         break;
     case Qt::Key_1:
         display = (display + 1) % 4;
+        cache_valid = false;
         update();
         break;
     case Qt::Key_2:
         scale++;
         if (scale > 20) scale = 20;
+        cache_valid = false;
         update();
         break;
     case Qt::Key_3:
         scale--;
         if (scale < -10) scale = -10;
+        cache_valid = false;
         update();
         break;
     case Qt::Key_4:
@@ -614,21 +563,25 @@ void Window::keyPressEvent(QKeyEvent *event)
         } else {
             n = MAXIMAL_N;
         }
+        cache_valid = false;
         update();
         break;
     case Qt::Key_5:
         n /= 2;
         if (n < 2) n = 2;
+        cache_valid = false;
         update();
         break;
     case Qt::Key_6:
         perturbation++;
         if (perturbation > 50) perturbation = 50;
+        cache_valid = false;
         update();
         break;
     case Qt::Key_7:
         perturbation--;
         if (perturbation < -50) perturbation = -50;
+        cache_valid = false;
         update();
         break;
     default:
